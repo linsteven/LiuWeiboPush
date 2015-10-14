@@ -39,7 +39,7 @@ def send(strSubject, content, opt = '') :
         mesg += '\n' + str(smtp.docmd('rcpt to:', usermail))
         mesg += '\n' + 'send to ' + usermail 
     else :
-      usermail = '<763061206@qq.com>'
+      usermail = '<1656758436@qq.com>'
       mesg += '\n' + str(smtp.docmd('rcpt to:', usermail))
       mesg += '\n' + 'send to ' + usermail
 

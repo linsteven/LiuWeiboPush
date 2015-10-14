@@ -33,7 +33,7 @@ while True :
         enterLiu = False
         sendLiu.informMyself('结束大刘')
       logFile.close()
-      time.sleep(3) # 每3秒获取一次数据
+      time.sleep(2) # 每2秒获取一次数据
 
   time.sleep(300)
 #end while

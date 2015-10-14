@@ -202,8 +202,11 @@ def runOnce(sendedLst, date) :
     if len(weibo) < 40 :
       rpos = len(weibo)
     logfile.write('new1')
-    sendLiu.send( '刘鹏程SaiL微博更新', weibo) 
-    #sendLiu.send( weibo[11:rpos] + '...', weibo) 
+    isSended = False
+    while(not isSended) :
+      # if send failed, send again until send successfully
+      isSended = sendLiu.send( '刘鹏程SaiL微博更新', weibo) 
+      logfile.write('\n in send while\n')
     logfile.write('\nafter send email\n')
   else :
     logfile.write('None!\n' + date + ' ' + curtime + '\n')
@@ -212,9 +215,9 @@ def runOnce(sendedLst, date) :
 def run() :
   date = time.strftime('%Y%m%d',time.localtime(time.time()))
   sendedLst = init(date)
-  while True : #无限循环
+  while True : 
     runOnce(sendedLst, date)
-    time.sleep(3)
+    time.sleep(2)
 
 
 #run()
