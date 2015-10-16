@@ -38,8 +38,8 @@ def send(strSubject, content, opt = '') :
         usermail = '<' + usermail + '>'
         mesg += '\n' + str(smtp.docmd('rcpt to:', usermail))
         mesg += '\n' + 'send to ' + usermail 
-    else :
-      usermail = '<1656758436@qq.com>'
+    else :  #inform myself 
+      usermail = '<youremail@qq.com>' #改成自己的邮箱
       mesg += '\n' + str(smtp.docmd('rcpt to:', usermail))
       mesg += '\n' + 'send to ' + usermail
 
