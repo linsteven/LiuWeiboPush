@@ -4,8 +4,12 @@ import urllib
 import re
 import time
 import codecs
-import sendLiu
+import sendCloud
 import socket
+from log import LogError
+from log import LogGet
+from log import LogSended
+from log import LogGetSended
 
 #getHtml(url) 获取url对应的网页内容
 #getWeibo 解析url获取微博内容、时间
@@ -14,6 +18,7 @@ import socket
 #runOnce 每次运行，看是否获取新微博，获取成功则发邮件推送
 
 socket.setdefaulttimeout(5)
+weiboUrl = 'http://www.imaibo.net/index.php?app=home&mod=Space&act=getSpaceWeibo300&uid=1954702'
 
 def getHtml(url) :
   html = ''
@@ -22,23 +27,20 @@ def getHtml(url) :
     html = page.read()
   except IOError, e : #socket.error:
     errno,errstr = sys.exc_info()[:2]
-    date = time.strftime('%Y%m%d',time.localtime(time.time()))
     curtime = time.strftime('%H:%M:%S',time.localtime(time.time()))
-    logfile = open('./log/Liuerror_' + date + '.log', 'a')
-    logfile.write('\n-----------------\n' + curtime + ' \n')
+    LogError('\n-----------------\n' + curtime)
     if errno == socket.timeout :
-      logfile.write('There was a timeout\n\n')
+      LogError('There was a timeout')
     else :
-      logfile.write('Some other socket error\n\n')
-    logfile.close()
-
+      LogError('Some other socket error')
   return html
 
 def getWeibo() :
   weiboLst = list()
-  weibos = getHtml('http://www.imaibo.net/index.php?app=home&mod=Space&act=getSpaceWeibo300&uid=1954702')
+  urlLst = list()
+  weibos = getHtml(weiboUrl)
   if weibos == '' :
-    return weiboLst
+    return weiboLst, urlLst
   lines = weibos.split('\u')
   content = ''
   #转unicode为中文
@@ -60,8 +62,14 @@ def getWeibo() :
         pos = line.find(u'[刘鹏程SaiL直播]', 1,-1)
         if pos > 0 : # if the line contains '展开更多', remove the less one
           line = line[:pos]
-        #line = line.replace('</a>','')
-        line, num = re.subn(ur"<((?!>).)*>", "", line)
+        pos = line.find('</span><div')
+        if pos > 0 :
+          line = line[:pos]
+        line = line.replace(u'[刘鹏程SaiL直播]</a>',u'[刘鹏程SaiL直播]')
+        line = line.replace('<div>','')
+        line = line.replace('</p>','')
+        #LogGet(line)
+       ### line, num = re.subn(ur"<((?!>).)*>", "", line)
         #line, num = re.subn(r'<a href.*_blank\'>','',line)
         #line, num = re.subn(r'<a target.*class\">','',line)
         #line, num = re.subn(r'<a target.*portfolio\/\d{2,6}\">','',line)
@@ -82,10 +90,16 @@ def getWeibo() :
         else : 
           pos = line.find(u'评论')
           line = line[pos:]
+          pos = line.find('<a href')
+          line = line[pos + 5:]
+          pleft = line.find('http')
+          pright = line.find('\"target')
+          url = line[pleft:pright]
           pos = line.find('blank\">')
           line = line[pos+7:]
           ctime, num = re.subn(r'<.*>','',line) # this line must be the last
           weiboLst.append(ctime)
+          urlLst.append(url)
       elif u"回复" in line : #当回复置顶时，不会有[刘鹏程SaiL直播], 需特殊处理
         pos1 = line.find(u'回复')
         part = line[pos1+1:]
@@ -97,11 +111,11 @@ def getWeibo() :
         line, num = re.subn(ur"<((?!>).)*>", "", line)
         weiboLst.append(line)
   #weiboLst中是微博内容及其时间，需要将其组合
-  return weiboLst
+  return weiboLst, urlLst
 
 def combine() :
   #测试函数
-  lst = getWeibo()
+  lst,urlLst = getWeibo()
   weibos = list()
   length = len(lst)
   #pos = lst[0].find(u'直播]')
@@ -123,13 +137,15 @@ def combine() :
   return weibos
 
 def getNewWeibo(sendedLst) :
-  lst = getWeibo()
+  lst,urlLst = getWeibo()
   length = len(lst)
   pos = 11 #去掉[刘鹏程Sail直播]
   weibo = ''
+  url = ''
   hasNew = False
   cur = ''
   date = ''
+  count = 0
   for i in range(12 if length > 12 else length):
     if u'[刘鹏程' in lst[i] :
       cur = lst[i]
@@ -150,19 +166,17 @@ def getNewWeibo(sendedLst) :
         if len(sendedLst) >= 20 :
           for k in range(10) :
             sendedLst.pop()
-        #更新本地文件
-        date = time.strftime('%Y%m%d',time.localtime(time.time()))
-        sendedFile = open('./log/sendedLiu_' + date + '.log','a')
-        sendedFile.write(cur + '\n')
-        sendedFile.close()
+        LogSended(cur)#更新本地文件
+        url = urlLst[count]
         break  #一次假设只有一条更新，即5秒内大刘不会发两条微博
+      count += 1
   if hasNew :
-    logfile = open('./log/getLiu_' + date + '.log', 'a')
-    logfile.write('hasNew is True:' + weibo + '\n')
+    LogGet('\n\nhasNew is True:\n' + weibo + '\n' + url)
+    #sendCloud.send(weibo[11:],url)
   if hasNew and '秒前' in weibo: # 满足刚刚更新的微博内容返回，不满足则添加进sended 文件
-    return weibo
+    return weibo,url
   else :
-    return ''
+    return '',''
 
 #weibos = getWeibo()
 #如何确认是新消息:
@@ -176,48 +190,40 @@ def getNewWeibo(sendedLst) :
 #1、打开程序，读取文件sended_08.log，（08表示月份）初始化sendedLst，最多append10个，最少0个。
 #2、每隔3s获取一次数据，分析是否有更新，有则发送，并更新sendedLst以及文件sended_08.log
 
-def init(date) :
-  reload(sys)
-  sys.setdefaultencoding('utf8') 
-  #date = time.strftime('%Y%m%d',time.localtime(time.time()))
-  sendedFile = open('./log/sendedLiu_' + date + '.log','a')
-  sendedFile.close()
-  sendedFile = open('./log/sendedLiu_' + date + '.log','r')
-  lines = sendedFile.readlines()
-  sendedFile.close()
+def init() :
+  lines = LogGetSended()
   length = len(lines)
   sendedLst = list()
   for i in range(length) :
     sendedLst.append(lines[i].strip('\n'))
   return sendedLst
 
-def runOnce(sendedLst, date) :
-  logfile = open('./log/getLiu_' + date + '.log', 'a')
-  weibo = getNewWeibo(sendedLst)
+def runOnce(sendedLst) :
+  weibo,url = getNewWeibo(sendedLst)
   curtime = time.strftime('%H:%M:%S',time.localtime(time.time()))
-  logfile.write('get New ok!' + curtime + '\n')
+  LogGet('get New ok!' + curtime)
+  print '\n' + curtime
+  print 'get New ok' + weibo
   if len(weibo) > 0 :
-    logfile.write('New weibo :' + weibo + '\n' + date + ' ' + curtime + '\n')
-    rpos = 40
-    if len(weibo) < 40 :
-      rpos = len(weibo)
-    logfile.write('new1')
-    isSended = False
-    while(not isSended) :
-      # if send failed, send again until send successfully
-      isSended = sendLiu.send( '刘鹏程SaiL微博更新', weibo) 
-      logfile.write('\n in send while\n')
-    logfile.write('\nafter send email\n')
+    LogGet('New weibo :' + weibo + '\n' + curtime)
+    sendCloud.send(weibo[11:], url)
+    #sendLiu.send( '刘鹏程SaiL微博更新', weibo) 
+    #sendLiu.send( weibo[11:rpos] + '...', weibo) 
+    LogGet('after send email')
   else :
-    logfile.write('None!\n' + date + ' ' + curtime + '\n')
-  logfile.close()
+    LogGet('None!\n' + curtime)
 
 def run() :
-  date = time.strftime('%Y%m%d',time.localtime(time.time()))
-  sendedLst = init(date)
-  while True : 
+  sendedLst = init()
+  while True : #无限循环
     runOnce(sendedLst, date)
-    time.sleep(2)
+    time.sleep(3)
 
+def test():
+  lst = list()
+  for i in range(1) :
+    getNewWeibo(lst)
+  #line 175
+ # getWeibo()
 
-#run()
+#test()
